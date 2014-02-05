@@ -1,0 +1,48 @@
+<!DOCTYPE HTML>
+<html lang="en-US">
+<head>
+	<meta charset="UTF-8">
+	<title>Lobby</title>
+</head>
+<body>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+	<script src="/socket.io/socket.io.js"></script>
+	<form action="/make_room" method="post" id="room_form">
+		Room Name:
+		<input type="text" name="room_name" />
+		Maximum Players:
+		<select name="max_players">
+			<option value="2">2</option>
+			<option value="4">4</option>
+		</select>
+		<input type="submit" value="Create Room" />
+	</form>
+	<h3>Lobby</h3>
+	<ul id="rooms_list"></ul>
+	
+	<script>
+		io = io.connect();
+		
+		io.emit('show_lobby');
+		io.on('render_rooms', function(rooms){
+			var rooms_list = document.getElementById('rooms_list');
+			rooms_list.innerHTML = "";
+			
+			for(index in rooms)
+			{
+				var room = document.createElement('li');
+				rooms_list.appendChild(room);
+				room.innerHTML = '<a href="/room/'+ rooms[index].room_id +'">'+ rooms[index].room_name +'</a> '+ rooms[index].member_count +'/'+ rooms[index].max_players;
+			}
+		});
+		
+		io.on('add_new_user', function(data){
+			var announcement = document.createElement('p');
+			var members_list = document.getElementById('announcements');
+			members_list.appendChild(announcement);
+			announcement.innerHTML = data.message;
+		});
+		
+	</script>
+</body>
+</html>

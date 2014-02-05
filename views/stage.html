@@ -1,0 +1,463 @@
+<!DOCTYPE HTML>
+<html lang="en-US">
+<head>
+	<meta charset="UTF-8">
+	<title></title>
+</head>
+<body>
+	<div id="canvas"></div>
+	<script type="text/javascript">
+		//var tiled_stage = [];
+		var box_array = [];
+		
+		function get_timestamp(){
+			var date = new Date();
+			return date.getTime();
+		}
+		
+		function Tank()
+		{
+			this.properties = {
+				color : '#00f',
+				x : Math.floor(Math.random() * 10) * 25,
+				y : 99,
+				width : 25,
+				height : 50,
+				element : null, /* EXCLUDE this when implementing IN NODE */
+				direction : 1,
+				move_speed : 25,
+				speed : 1,
+				armed : false,
+				power : 10,
+				charge : 1,
+				angle : 45,
+				turret_location : 0,
+				max_height : 375,
+				weight : 1
+			}
+			
+			this.y_offset = 2;
+			
+			var self = this;
+			
+			this.initialize = function(settings){
+				var tank = document.createElement('div');
+				var tank_id = 'tank_'+ get_timestamp();
+				tank.setAttribute('id', tank_id);
+				document.body.appendChild(tank);
+				self.properties.element = tank;
+				self.properties.turret_location = self.properties.x + (self.properties.width / 2);
+				
+				document.onkeydown = function(e){
+					if(self.properties.armed == false)
+					{
+						if((e.which == 65 || e.keyCode == 65) && self.properties.x > 0)
+						{
+							self.move(self.properties.move_speed * -1, null, -1);
+						}
+						
+						if(e.which == 68 || e.keyCode == 68)
+						{
+							self.move(self.properties.move_speed, null, 1);
+						}
+					}
+					
+					if(e.which == 32 || e.keyCode == 32)
+					{
+						if(self.properties.armed == true)
+						{
+							self.charge_turret(get_timestamp());
+						}
+					}
+					
+					if(e.which == 38 || e.keyCode == 38)
+						self.change_angle(1);
+					
+					if(e.which == 40 || e.keyCode == 40)
+						self.change_angle(-1);
+						
+					return this;
+				}
+				
+				document.onkeyup = function(e){
+					if(e.which == 65 || e.keyCode == 65)
+						self.change_direction(-1);
+					
+					if(e.which == 68 || e.keyCode == 68)
+						self.change_direction(1);
+					
+					if(e.which == 38 || e.keyCode == 38)
+						self.change_angle(1);
+					
+					if(e.which == 40 || e.keyCode == 40)
+						self.change_angle(-1);
+					
+					if(e.which == 87 || e.keyCode == 87){
+						self.load_turret();
+					}
+					
+					if(e.which == 32 || e.keyCode == 32)
+					{
+						if(self.properties.armed == true)
+						{
+							self.fire_turret({
+								direction : self.properties.direction,
+								force : /*self.tank.power*/ 145
+							});
+						}
+					}
+				}
+				
+				self.update();
+			}
+			
+			this.move = function(x, y, direction){
+				self.properties.turret_location += x;
+				
+				if(self.is_colliding(x) == false){
+					self.properties.x += x;
+				}
+					
+				self.update();
+			}
+			
+			this.change_direction = function(direction){
+				self.properties.direction = direction;
+			}
+			
+			this.change_angle = function(degree){
+				self.properties.angle += degree;
+				//angle_element.innerHTML = self.properties.angle;
+			}
+			
+			this.draw = function(){
+				self.properties.element.setAttribute('style', 'position: absolute; top:'+ self.properties.y +'px; left: '+ self.properties.x +'px; background: '+ self.properties.color +'; width: '+ self.properties.width +'px; height: '+ self.properties.height +'px;');
+			}
+			
+			this.update = function(){
+				if(self.is_landed() == false)
+				{
+					self.properties.element.innerHTML = self.properties.x +': '+ self.properties.y;
+				
+					self.fall();
+				}
+				self.draw();
+				
+				setTimeout(self.update, self.properties.speed);
+			}
+			
+			this.fall = function(){
+				if(self.properties.y + self.properties.height < self.properties.max_height)
+					self.properties.y += self.properties.weight;
+			}
+			
+			this.load_turret = function()
+			{
+				self.properties.color = '#f00';
+				self.properties.armed = true;
+				self.update();
+			}
+			
+			this.charge_turret = function(charge){
+				self.properties.charge += 2;
+				//force_element.innerHTML = self.properties.charge;
+			}
+			
+			this.fire_turret = function(properties)
+			{
+				var new_projectile = document.createElement('div');
+				var projectile_id = 'bullet_'+ get_timestamp();
+				new_projectile.setAttribute('id', projectile_id);
+				document.body.appendChild(new_projectile);
+				
+				var projectile = new Projectile(projectile_id, {
+										x : self.properties.turret_location,
+										y : self.properties.y,
+										force : self.properties.charge * self.properties.power,
+										direction : self.properties.direction,
+										angle : self.properties.angle,
+										durability : 1
+									});
+				
+				self.properties.armed = false;
+				self.properties.color = '#00f';
+				self.properties.charge = 0;
+				
+				self.update();
+				return this;
+			}
+			
+			this.is_landed = function(){
+				var landed = false;
+				
+				for(box in box_array)
+				{
+					if(self.properties.y != box_array[box].properties.y && (self.properties.y + self.properties.height) > box_array[box].properties.y
+					&& (self.properties.x == box_array[box].properties.x))
+						landed = true;
+				}
+				
+				return landed;
+			}
+			
+			this.is_colliding = function(x_offset){
+				var colliding = false;
+				var colliding_blocks = [];
+				
+				var y_comparison = self.properties.y + (self.properties.height - 1);
+				
+				for(box in box_array)
+				{
+					if(x_offset < 0 && box_array[box].properties.x + box_array[box].properties.width == self.properties.x 
+					&& y_comparison === (box_array[box].properties.y + box_array[box].properties.height))
+						colliding_blocks.push(box_array[box]);
+					
+					if(x_offset > 0 && box_array[box].properties.x - self.properties.width == self.properties.x 
+					&& y_comparison === (box_array[box].properties.y + box_array[box].properties.height))
+						colliding_blocks.push(box_array[box]);
+				}
+				
+				if(colliding_blocks.length > 0)
+					colliding = true;
+					
+				return colliding;
+			}
+			
+			this.initialize();
+		}
+		
+		//test tank
+		var tank = new Tank();
+		
+		function Box(name, x, y, max_boxes){
+			this.properties = {
+				x : 1,
+				y : 1,
+				name : '',
+				width : 25,
+				height: 25,
+				weight: 1,
+				max_height: 250,
+				durability: 2,
+				color: '#0f0',
+				element : null
+			}
+			
+			var self = this;
+			
+			this.initialize = function(){
+				var new_box = document.createElement('div');
+				self.properties.x = x * self.properties.width;
+				self.properties.y = y * self.properties.height;
+				self.properties.color = '#'+ (Math.floor(Math.random() * 9))+ (Math.floor(Math.random() * 9))+ (Math.floor(Math.random() * 9));
+				self.properties.name = name;
+				self.properties.max_height = (max_boxes + 1) * self.properties.height;
+				new_box.setAttribute('id', name);
+				new_box.setAttribute('style', 'position: absolute; width: '+ self.properties.width +'px; height: '+ self.properties.height +'px; top: '+ self.properties.y +'px;' +' left: '+ self.properties.x +'px; background: '+ self.properties.color +';');
+				self.properties.element = new_box;
+				document.body.appendChild(new_box);
+				
+				new_box.onclick = function(){
+					self.remove_box();
+				}	
+				
+				self.update();
+			}
+			
+			this.fall = function(){
+				if(self.properties.y < self.properties.max_height)
+					self.properties.y += self.properties.weight;
+			}
+			
+			this.remove_box = function(){
+				for(box in box_array)
+				{
+					if(self.properties.name == box_array[box].properties.name)
+					{
+						self.properties.durability -= 1;
+						
+						if(self.properties.durability == 0)
+						{
+							var removed_box = document.getElementById(box_array[box].properties.name);
+							box_array.splice(box, 1);
+							document.body.removeChild(removed_box);
+						}
+					}
+					else{
+						if(box_array[box].properties.x == self.properties.x && box_array[box].properties.y < self.properties.y )
+							box_array[box].fall();
+					}
+					
+				}
+			}
+			
+			this.draw = function(){
+				self.properties.element.setAttribute('style', 'font-size: 10px; position: absolute; width: '+ self.properties.width +'px; height: '+ self.properties.height +'px; top: '+ self.properties.y +'px;' +' left: '+ self.properties.x +'px; background: '+ self.properties.color +';');
+			}
+			
+			this.update = function(){
+				if(self.collision() == false)
+				{
+					self.properties.element.innerHTML = self.properties.x +': '+ self.properties.y;
+					self.fall();
+				}	
+					
+				self.draw();
+				
+				setTimeout(self.update, 1);
+			}
+			
+			this.collision = function(){
+				var colliding = false;
+				
+				for(box in box_array)
+				{
+					if(self.properties.name != box_array[box].properties.name)
+					{
+						if(self.properties.y != box_array[box].properties.y && (self.properties.y + self.properties.height) == box_array[box].properties.y)
+							colliding = true;
+					}
+				}
+				
+				return colliding;
+			}
+			
+			this.initialize();
+		}
+		
+		
+		function Projectile(element, properties){
+			this.x = (typeof(properties) == 'object' && typeof(properties.x) == 'number') ? properties.x : 100;
+			this.y = (typeof(properties) == 'object' && typeof(properties.y) == 'number') ? properties.y : 100;
+			this.force = (typeof(properties) == 'object' && typeof(properties.force) == 'number') ? properties.force * 3 : 100;
+			this.speed = 20;
+			this.projectile_element = document.getElementById(element);
+			this.position = 100;
+			this.width = 10;
+			this.height = 10;
+			this.durability = (typeof(properties) == 'object' && typeof(properties.durability) == 'number') ? properties.durability : 1;
+			this.damage = 10;
+			this.destroyed = false;
+			this.time = 0;
+			this.angle = (typeof(properties) == 'object' && typeof(properties.angle) == 'number') ? properties.angle * 5: 45;
+			this.direction = (typeof(properties) == 'object' && typeof(properties.direction) == 'number') ? properties.direction : 1;
+			
+			this.trajectory = {
+				initial_pos : 0,
+				min_range : -2,
+				max_range : 2
+			}
+			
+			var self = this;
+			
+			this.launch = function(){
+				self.trajectory.max_range = self.force;
+				self.trajectory.min_range = self.trajectory.max_range * (-1);
+				self.projectile_element = document.getElementById(element);
+				self.collision();
+				self.travel();
+			}
+			
+			this.update_coordinates = function(){
+				
+				self.trajectory.min_range += self.speed;
+					
+				self.time += 1;
+				self.damage += self.speed / self.angle;
+				
+				self.y += self.trajectory.min_range * ((self.speed/100) / self.angle);
+					
+				self.x += ( self.force / self.angle ) * (self.direction);
+				
+				if(self.y <= (window.innerHeight - 10) && self.x < (window.innerWidth - 20))
+				{
+					self.projectile_element.setAttribute('style', 'background: #0f0; position:absolute; top: '+ self.y +'px; left: '+ self.x +'px; width: 10px; height: 10px; -webkit-border-radius: 10px; -moz-border-radius: 10px; border-radius: 10px;');
+					self.collision();
+				}
+				else
+				{
+				
+					if(self.projectile_element != null)
+					{
+						document.body.removeChild(self.projectile_element);
+					}
+				}	
+			};
+			
+			this.collision = function(){
+				for(box in box_array)
+				{
+					var collision_x = false;
+					var collision_y = false;
+					
+					if(self.x < box_array[box].properties.x && (self.x + self.width) > box_array[box].properties.x && (self.x + self.width) < (box_array[box].properties.x + box_array[box].properties.width) 
+					|| self.x > box_array[box].properties.x && self.x < (box_array[box].properties.x + box_array[box].properties.width) )
+						collision_x = true;
+					
+					if(self.y < box_array[box].properties.y && (self.y + self.height) > box_array[box].properties.y && (self.y + self.height) < (box_array[box].properties.y + box_array[box].properties.height )
+					|| self.y > box_array[box].properties.y && self.y < (box_array[box].properties.y + box_array[box].properties.height))
+						collision_y = true;
+						
+					if(collision_x == true && collision_y == true)
+					{
+						self.durability -= 1;
+						
+						if(self.durability <= 0 )
+							document.body.removeChild(self.projectile_element);
+							
+						box_array[box].remove_box();
+					}
+				}
+				
+				setTimeout(self.travel, self.speed);
+			}
+
+			this.travel = function(){
+				self.update_coordinates();
+			}
+			
+			this.launch();
+		}
+		
+		var tile_cols = [];
+		var max_cols = 50;
+		var cols_range = ( max_cols / 2 ) * -1;
+		
+		for(var cols = 0; cols < max_cols; cols++)
+		{
+			tile_cols[cols] = [];
+			//var tile_rows = [];
+			for(var rows = 0; rows < 20; rows++)
+			{
+				if(rows > 10){
+					//tile_rows.push(1);
+					var box = new Box('box_'+cols+rows, cols, rows, 20);
+					box_array.push(box);
+				}
+				//else
+					//tile_rows.push(0);
+			}
+			
+			//tile_cols.push(tile_rows);
+		}
+		
+		// broadcast the tile design
+		
+		/*var canvas = document.getElementById('canvas');
+		for(x_index in tile_cols)
+		{
+			for(y_index in tile_cols[x_index])
+			{
+				var tile = document.createElement('div');
+			
+				if(tile_cols[x_index][y_index] == 1)
+					tile.setAttribute('style', 'background: #abc;position:absolute;top:'+ (y_index * 15) +'px;left:'+ (x_index * 15) +'px;width:15px;height:15px;');
+				else
+					tile.setAttribute('style', 'position:absolute;top:'+ (y_index * 15) +'px;left:'+ (x_index * 15) +'px;width:15px;height:15px;');
+					
+				canvas.appendChild(tile);
+			}
+		}*/		
+	</script>
+</body>
+</html>

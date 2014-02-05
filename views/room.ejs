@@ -1,0 +1,283 @@
+<!DOCTYPE HTML>
+<html lang="en-US">
+<head>
+	<meta charset="UTF-8">
+	<title><%= title %> - <%= user_name %></title>
+	<style type="text/css">
+		.tile{
+			position: absolute;
+			background: #def;
+		}
+		.tile.air{
+			background: #def;
+		}
+		.tile.ground{
+			background: #713E29;
+		}
+		.tile.floor_1{
+			background: url('../images/floor_1.png') no-repeat;
+			background-size: 100% 100%;
+		}
+		.tile.floor_2{
+			background: url('../images/floor_2.png') no-repeat;
+			background-size: 100% 100%;
+		}
+		#players
+		{
+			position: absolute;
+			top: 0px;
+			left: 0px;
+		}
+		#scrolls
+		{
+			position: absolute;
+			top: 0px;
+			left: 0px;
+		}
+		.player{
+			background: #abc;
+			font-size:10px;
+			position: absolute;
+		}
+		.player.head{
+			background: #abc;
+			font-size:10px;
+			position: absolute;
+			-webkit-border-radius: 15px !important;-moz-border-radius: 15px !important;border-radius: 15px !important;
+		}
+		.scroll{
+			position: absolute;
+			background: url('../images/scroll.png') no-repeat;
+			background-size: 100% 100%;
+		}
+		#leave{
+			position: absolute;
+		}
+		#announcements{
+			color:#000;
+			font-weight:bold;
+			position: absolute;
+			top: 0px;
+			text-align:center;
+			width:100%;
+			z-index:1;
+		}
+	</style>
+</head>
+<body>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+	<script src="/socket.io/socket.io.js"></script>
+	<script src="/javascripts/game.js"></script>
+	<div id="announcements"><%= default_message %></div>
+	<div id="stage"></div>
+	<div id="players"></div>
+	<div id="scrolls"></div>
+	<button id="leave">Leave</button>
+	<script>
+		// start the game
+		var scrolls_layer = document.getElementById('scrolls');
+		var players_layer = document.getElementById('players');
+	
+		io = io.connect();
+		
+		window.onload = function(){
+			var alerted = false;
+			var allow_keys = false;
+			var man = new Man({
+								name : '<%= user_name %>', 
+								room_id : '<%= room_id %>', 
+								user_id : '<%= user_id %>', 
+								health : <%= parseInt(starting_health) %>,
+								direction : <%= parseInt(direction) %>,
+								team : <%= parseInt(team) %>,
+								x : <%= parseInt(x_coord) %>,
+								y : <%= parseInt(y_coord) %>
+							});
+			
+			var user_id = null;
+			var max_players = <%= parseInt(max_players) %>;
+			
+			<% if(room_id) 
+				{	%>
+				
+				io.emit('new_user', <%= room_id %>);
+				user_id = '<%= user_id %>';
+				setTimeout(function(){
+					console.log(team);
+				}, 5000)
+				var room_id = '<%= room_id %>';
+			<% }
+				else
+				{	%>
+				alert('foo');
+			<% } %>
+							
+			io.on('render_users', function(data){
+				users_array = data.players;
+				var player_sprites = '';
+				
+				if(data.player_count == max_players)
+				{
+					allow_keys = true;
+					$('#announcements').html('');
+					players_layer.innerHTML = '';
+					
+					for(var user_index in users_array)
+					{
+						if(team[users_array[user_index].team - 1] == null || typeof(team[users_array[user_index].team - 1]) != 'array'){
+							team[users_array[user_index].team - 1] = [];
+						}
+						
+						team_member_index = team[users_array[user_index].team - 1].indexOf(users_array[user_index].user_id);
+						
+						if( users_array[user_index].health >= 0)
+						{
+							if(team_member_index < 0)
+								team[users_array[user_index].team - 1].push(users_array[user_index].user_id);
+								
+							var player_sprite = '';
+							
+							if(man.config.user_id == users_array[user_index].user_id){
+								man.config.health = users_array[user_index].health;
+							}
+							
+							for(var y_coord in users_array[user_index].shape)
+							{
+								for(var x_coord in users_array[user_index].shape[y_coord])
+								{
+									if(users_array[user_index].shape[y_coord][x_coord] == 1){
+										var add_player_part_class = (y_coord == 0) ? 'head' : 'body';
+										var add_player_direction_class = (users_array[user_index].direction > 0) ? 'left' : 'right';
+										player_sprite += '<div class="player '+ add_player_part_class +' '+ add_player_direction_class +'" style="width:'+ square_size +'px;height:'+ square_size +'px; top:'+ ((square_size * users_array[user_index].y) + (square_size * y_coord)) +'px; left:'+ (square_size * users_array[user_index].x + (square_size * x_coord)) +'px;">'+
+														((y_coord == 0) ? users_array[user_index].name +' '+ users_array[user_index].health : users_array[user_index].max_health )
+														+'</div>';
+									}
+								}
+							}
+							
+							player_sprites += player_sprite;
+						}
+						else
+						{
+							if( alerted == false && man.config.user_id == users_array[user_index].user_id ){
+								alerted = true;
+								allow_keys = false;
+								man.die();
+							}
+						}
+					}
+					
+					players_layer.innerHTML = player_sprites;
+				}
+				else
+				{	
+					allow_keys = false;
+					$('#announcements').html('Waiting for other players');
+					setTimeout(function(){
+						reset_players(users_array);
+					}, 1000);
+				}
+			});
+			
+			io.on('render_scrolls', function(scrolls){
+				for(var scroll_index in scrolls)
+				{
+					var scroll_element = document.getElementById(scrolls[scroll_index].name);
+					
+					if(scroll_element == null)
+					{
+						scroll_element = document.createElement('div');
+						scroll_element.setAttribute('id', scrolls[scroll_index].name);
+						scrolls_layer.appendChild(scroll_element);
+					}
+					
+					var add_scroll_class = (scrolls[scroll_index].direction > 0) ? 'move_right' : 'move_left';
+					scroll_element.setAttribute('class', 'scroll '+ add_scroll_class);
+					scroll_element.setAttribute('style', 'width:'+ square_size +'px;height:'+ square_size +'px;top:'+ (square_size * scrolls[scroll_index].y) +'px;left:'+ (square_size * scrolls[scroll_index].x) +'px;');
+					
+					scroll_element.style.webkitTransform = 'rotate('+ scrolls[scroll_index].degree +'deg)'; 
+					scroll_element.style.mozTransform    = 'rotate('+ scrolls[scroll_index].degree +'deg)'; 
+					scroll_element.style.msTransform     = 'rotate('+ scrolls[scroll_index].degree +'deg)'; 
+					scroll_element.style.oTransform      = 'rotate('+ scrolls[scroll_index].degree +'deg)'; 
+					scroll_element.style.transform       = 'rotate('+ scrolls[scroll_index].degree +'deg)';
+				}
+			});
+			
+			io.on('remove_scrolls', function(scroll){
+				var scroll_element = document.getElementById(scroll.name);
+				
+				if(scroll_element != null)
+					scrolls_layer.removeChild(scroll_element);
+			});
+			
+			io.on('announce_winner', function(message){
+				$('#announcements').html(message);
+				allow_keys = false;
+				setTimeout(function(){
+					$('#announcements').html('The game will now reset');
+					
+					setTimeout(function(){
+						reset_players(users_array)
+						setTimeout(function(){
+							console.log(team);
+						}, 5000)
+					}, 1500);
+				}, 1000);
+			});
+		
+			// render game;
+			draw_grid();
+			
+			io.on('exit_to_lobby', function(data){
+				window.location = '/lobby';
+			});
+			
+			$('#leave').on('click', function(){
+				io.emit('leave_room', room_id);
+			});
+			
+			document.onkeydown = function(e){
+				if(allow_keys == true)
+					man.keydown(e);
+			}
+
+			document.onkeyup = function(e){
+				if(allow_keys == true)
+					man.keyup(e);
+			}
+			
+			function reset_players(current_users_array){
+				allow_keys = true;
+				var players = [];
+				for(var users_index in current_users_array)
+				{
+					current_users_array[users_index].x = current_users_array[users_index].starting_x;
+					current_users_array[users_index].y = 0;
+					current_users_array[users_index].health = current_users_array[users_index].max_health;
+					players.push(current_users_array[users_index]);
+					
+					if(man.config.user_id == current_users_array[users_index].user_id)
+						man.config = current_users_array[users_index];
+				}
+				
+				remaining_players = max_players;
+				io.emit('reset_players', { room_id : room_id, sprites: players });
+			}
+		}
+		
+		if (!Array.prototype.indexOf)
+		{
+			Array.prototype.indexOf = function(element)
+			{
+				for(var index in this)
+				{
+					if(this[index] == element)
+						return index;
+				}
+				
+				return -1;
+			};
+		}
+	</script>
+</body>
+</html>

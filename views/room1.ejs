@@ -1,0 +1,78 @@
+<!DOCTYPE HTML>
+<html lang="en-US">
+<head>
+	<meta charset="UTF-8">
+	<title></title>
+</head>
+<body>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+	<script src="/socket.io/socket.io.js"></script>
+	<h1 id="room_name"></h1>
+	<section>
+		<form action="/send_message" id="chatbox" method="post">
+			<input type="text" name="message" />
+			<input type="submit" value="Send" />
+			<input type="reset" value="Clear" />
+		</form>
+	</section>
+	<section id="messages"></section>
+	<button id="leave">Leave</button>
+	<ul id="members"></ul>
+	<aside id="members_list">
+		<h4>Announcements:</h4>
+	</aside>
+	<script>
+		var body = document.body;
+		var player_room = null;
+		var player = null;
+		var room_members = [];
+		io = io.connect();
+		
+		io.emit('join_room');
+		io.on('render_room', function(room){
+			player_room = room;
+			var room_name = document.getElementById('room_name');
+			room_name.innerHTML = room.room_name;
+		});
+		
+		$('#chatbox').on('submit', function(){
+			var form = $(this);
+			io.emit('send_message', form.serialize());
+			form.find(':reset').trigger('click');
+			return false;
+		});
+		
+		io.on('kick_user', function(session){
+			window.location = '/lobby';
+		});
+		
+		io.on('show_room_members', function(room){
+			$('#members').html('');
+			room_members = room.room_members;
+			
+			for(index in room.members)
+			{
+				$('#members').append('<li>Member: '+ room.members[index] +'</li>');
+			}
+		});
+		
+		io.on('announce', function(data) {
+			var announcement = document.createElement('p');
+			var members_list = document.getElementById('members_list');
+			members_list.appendChild(announcement);
+			announcement.innerHTML = data.message;
+		})
+		
+		io.on('show_message', function(data) {
+			var message = document.createElement('p');
+			var messages = document.getElementById('messages');
+			messages.appendChild(message);
+			message.innerHTML = data.message;
+		});
+		
+		$('#leave').on('click', function(){
+			io.emit('leave_room', player_room);
+		});
+	</script>
+</body>
+</html>
